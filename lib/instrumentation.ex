@@ -65,8 +65,8 @@ defmodule OpentelemetryAbsinthe.Instrumentation do
       |> put_if(config.trace_request_query, {"graphql.request.query", params["query"]})
 
     save_parent_ctx()
-
-    new_ctx = Tracer.start_span(config.span_name, %{attributes: attributes})
+    span_name = get_naive_query_name(metadata, config.span_name)
+    new_ctx = Tracer.start_span(span_name, %{attributes: attributes})
 
     Tracer.set_current_span(new_ctx)
   end
@@ -118,4 +118,20 @@ defmodule OpentelemetryAbsinthe.Instrumentation do
   defp set_status(nil), do: :ok
   defp set_status([]), do: :ok
   defp set_status(_errors), do: Tracer.set_status(OpenTelemetry.status(:error, ""))
+
+  defp get_naive_query_name(%{options: options}, default) when is_list(options) do
+    options
+    |> Keyword.get(:document, "")
+    |> String.split("\n")
+    |> case do
+      [type_string, first_query_string | _] ->
+        type = if type_string =~ "mutation", do: "gql mutation ", else: "gql query "
+        (type <> first_query_string) |> String.replace("{", "") |> String.trim()
+
+      _ ->
+        default
+    end
+  end
+
+  defp get_naive_query_name(_, default), do: default
 end
